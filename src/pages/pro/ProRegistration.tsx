@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ArrowRight, ArrowLeft, Building2, MapPin, Wrench, Clock, Upload, CheckCircle2 } from 'lucide-react'
-import { blink } from '@/lib/blink'
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
 import toast from 'react-hot-toast'
 
@@ -126,43 +126,48 @@ export function ProRegistration() {
       let logoUrl = ''
       if (logoFile) {
         const ext = logoFile.name.split('.').pop()
-        const { url } = await blink.storage.upload(logoFile, {
-          path: `logos/${user.id}.${ext}`,
-        })
-        logoUrl = url
+        const fileName = `${user.id}-${Date.now()}.${ext}`
+        
+        const { error: uploadError } = await supabase.storage
+          .from('logos')
+          .upload(fileName, logoFile)
+
+        if (uploadError) throw uploadError
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('logos')
+          .getPublicUrl(fileName)
+          
+        logoUrl = publicUrl
       }
       
       // Create professional profile
-      await blink.db.professionals.create({
-        userId: user.id,
+      const { error: proError } = await supabase.from('professionals').insert({
+        user_id: user.id,
         siret: data.siret,
-        companyName: data.companyName,
         name: data.companyName,
-        legalName: data.legalName,
-        streetNumber: data.streetNumber,
-        streetName: data.streetName,
         address: `${data.streetNumber} ${data.streetName}, ${data.postalCode} ${data.city}`,
-        postalCode: data.postalCode,
         city: data.city,
-        country: data.country,
         phone: data.phone,
-        email: data.email,
-        website: data.website || null,
-        activityType: data.activityType,
         description: data.description,
-        capacity: data.capacity,
-        logoUrl: logoUrl || null,
+        logo_url: logoUrl || null,
         status: 'pending',
-        isActive: 0,
-        isVerified: 0,
+        is_verified: false,
       })
+
+      if (proError) throw proError
       
       // Update user role
-      await blink.db.users.update(user.id, { role: 'pro' })
+      const { error: roleError } = await supabase
+        .from('profiles')
+        .update({ role: 'pro' })
+        .eq('id', user.id)
+
+      if (roleError) throw roleError
       
       toast.success('Inscription envoyée ! Validation sous 24-48h.')
       navigate('/pro/dashboard')
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
       toast.error('Erreur lors de l\'inscription')
     } finally {

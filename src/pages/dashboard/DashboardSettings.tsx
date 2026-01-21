@@ -5,12 +5,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { User, Phone, Mail, Lock, Shield, Bell } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
-import { blink } from '@/lib/blink'
+import { supabase } from '@/lib/supabase'
 import { toast } from 'react-hot-toast'
 
 export function DashboardSettings() {
   const { profile, user } = useAuth()
-  const [displayName, setDisplayName] = useState(profile?.displayName || '')
+  const [displayName, setDisplayName] = useState(profile?.full_name || '')
   const [phone, setPhone] = useState(profile?.phone || '')
   const [isLoading, setIsLoading] = useState(false)
 
@@ -18,10 +18,15 @@ export function DashboardSettings() {
     e.preventDefault()
     setIsLoading(true)
     try {
-      await blink.db.users.update(profile!.id, {
-        displayName,
-        phone
-      })
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: displayName,
+          phone
+        })
+        .eq('id', profile?.id)
+
+      if (error) throw error
       toast.success('Profil mis à jour')
     } catch (error) {
       toast.error('Erreur lors de la mise à jour')

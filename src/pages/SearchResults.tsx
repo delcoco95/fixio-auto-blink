@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ProCard } from '@/components/professional/ProCard'
 import { SearchFilters } from '@/components/search/SearchFilters'
-import { blink } from '@/lib/blink'
+import { supabase } from '@/lib/supabase'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface Professional {
@@ -16,49 +16,6 @@ interface Professional {
   distance?: string
 }
 
-const MOCK_PROS: Professional[] = [
-  {
-    id: 'pro_1',
-    name: 'Garage Central Paris',
-    address: '15 Rue de Rivoli, 75001 Paris',
-    rating: 4.8,
-    reviewCount: 124,
-    nextAvailability: 'Aujourd\'hui à 14:30',
-    logoUrl: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=80&w=200&h=200',
-    distance: '1.2 km'
-  },
-  {
-    id: 'pro_2',
-    name: 'Auto Service Expertise',
-    address: '42 Avenue de la République, 75011 Paris',
-    rating: 4.9,
-    reviewCount: 89,
-    nextAvailability: 'Demain à 09:00',
-    logoUrl: 'https://images.unsplash.com/photo-1517524204412-1a96975d040d?auto=format&fit=crop&q=80&w=200&h=200',
-    distance: '3.5 km'
-  },
-  {
-    id: 'pro_3',
-    name: 'Mécano Rapid\'',
-    address: '8 bis Rue Oberkampf, 75011 Paris',
-    rating: 4.5,
-    reviewCount: 256,
-    nextAvailability: 'Aujourd\'hui à 16:45',
-    logoUrl: 'https://images.unsplash.com/photo-1530046339160-ce3e5b097ea2?auto=format&fit=crop&q=80&w=200&h=200',
-    distance: '2.1 km'
-  },
-  {
-    id: 'pro_4',
-    name: 'Pneus & Co',
-    address: '124 Boulevard Voltaire, 75011 Paris',
-    rating: 4.7,
-    reviewCount: 412,
-    nextAvailability: 'Lundi à 10:00',
-    logoUrl: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&q=80&w=200&h=200',
-    distance: '4.8 km'
-  }
-]
-
 export function SearchResults() {
   const [searchParams] = useSearchParams()
   const [pros, setPros] = useState<Professional[]>([])
@@ -69,13 +26,47 @@ export function SearchResults() {
   const location = searchParams.get('l') || ''
 
   useEffect(() => {
-    // Simulate API fetch
-    const timer = setTimeout(() => {
-      setPros(MOCK_PROS)
-      setIsLoading(false)
-    }, 800)
-    return () => clearTimeout(timer)
+    fetchPros()
   }, [query, location])
+
+  const fetchPros = async () => {
+    setIsLoading(true)
+    try {
+      let supabaseQuery = supabase
+        .from('professionals')
+        .select('*')
+        .eq('status', 'active')
+
+      if (query) {
+        supabaseQuery = supabaseQuery.ilike('name', `%${query}%`)
+      }
+
+      if (location) {
+        supabaseQuery = supabaseQuery.ilike('city', `%${location}%`)
+      }
+
+      const { data, error } = await supabaseQuery
+
+      if (error) throw error
+
+      const formattedPros: Professional[] = (data || []).map(pro => ({
+        id: pro.id,
+        name: pro.name,
+        address: pro.address || '',
+        rating: pro.rating || 0,
+        reviewCount: pro.review_count || 0,
+        nextAvailability: 'Prochainement', // This would require complex logic
+        logoUrl: pro.logo_url || 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=80&w=200&h=200',
+        distance: 'Local'
+      }))
+
+      setPros(formattedPros)
+    } catch (error) {
+      console.error('Error fetching pros:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">

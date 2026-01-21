@@ -9,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Checkbox } from '@/components/ui/checkbox'
 import { User, Briefcase, Mail, Lock, Building2, MapPin, Phone, CheckCircle2 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { blink } from '@/lib/blink'
 
 export function Auth() {
   const [searchParams] = useSearchParams()

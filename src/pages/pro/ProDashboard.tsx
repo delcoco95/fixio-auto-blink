@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Calendar, Users, Wrench, BarChart3, Clock, CheckCircle2, Settings, Image, Plus, ChevronRight, AlertCircle, CreditCard } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Badge } from '@/components/ui/badge'
-import { blink } from '@/lib/blink'
+import { supabase } from '@/lib/supabase'
 import { toast } from 'react-hot-toast'
 import { cn } from '@/lib/utils'
 
@@ -31,18 +31,26 @@ export function ProDashboard() {
   const fetchProData = async () => {
     setIsLoading(true)
     try {
-      const proRecord = await blink.db.professionals.list({
-        where: { userId: profile?.id }
-      }) as any[]
+      const { data: proRecord, error: proError } = await supabase
+        .from('professionals')
+        .select('*')
+        .eq('user_id', profile?.id)
+        .single()
 
-      if (proRecord.length > 0) {
-        const proId = proRecord[0].id
-        const [appts, svcs] = await Promise.all([
-          blink.db.appointments.list({ where: { professionalId: proId } }),
-          blink.db.services.list({ where: { professionalId: proId } })
+      if (proError) throw proError
+
+      if (proRecord) {
+        const proId = proRecord.id
+        const [apptsRes, svcsRes] = await Promise.all([
+          supabase.from('appointments').select('*, service:services(*), client:profiles(*)').eq('professional_id', proId),
+          supabase.from('services').select('*').eq('professional_id', proId)
         ])
-        setAppointments(appts)
-        setServices(svcs)
+        
+        if (apptsRes.error) throw apptsRes.error
+        if (svcsRes.error) throw svcsRes.error
+
+        setAppointments(apptsRes.data)
+        setServices(svcsRes.data)
       }
     } catch (error) {
       console.error('Error fetching pro data:', error)
@@ -90,7 +98,7 @@ export function ProDashboard() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Tableau de bord</h1>
           <p className="text-muted-foreground">
-            Bienvenue, {profile?.displayName || 'Partenaire'}. Gerez votre garage et vos rendez-vous.
+            Bienvenue, {profile?.full_name || 'Partenaire'}. Gerez votre garage et vos rendez-vous.
           </p>
         </div>
         <div className="flex gap-3">

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ShieldAlert, Users, Building2, CheckCircle2, XCircle, Search, Trash2, Ban } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { blink } from '@/lib/blink'
+import { supabase } from '@/lib/supabase'
 import { toast } from 'react-hot-toast'
 
 export function AdminDashboard() {
@@ -26,11 +26,19 @@ export function AdminDashboard() {
   const fetchData = async () => {
     setIsLoading(true)
     try {
-      const [users, pros, appointments] = await Promise.all([
-        blink.db.users.list(),
-        blink.db.professionals.list(),
-        blink.db.appointments.list()
+      const [profilesRes, prosRes, appointmentsRes] = await Promise.all([
+        supabase.from('profiles').select('*'),
+        supabase.from('professionals').select('*'),
+        supabase.from('appointments').select('*', { count: 'exact' })
       ])
+
+      if (profilesRes.error) throw profilesRes.error
+      if (prosRes.error) throw prosRes.error
+      if (appointmentsRes.error) throw appointmentsRes.error
+
+      const users = profilesRes.data
+      const pros = prosRes.data
+      const appointments = appointmentsRes.data
 
       const clientsCount = users.filter((u: any) => u.role === 'client').length
       const prosCount = pros.filter((p: any) => p.status === 'active').length
@@ -54,12 +62,16 @@ export function AdminDashboard() {
 
   const handleApprove = async (proId: string) => {
     try {
-      await blink.db.professionals.update(proId, {
-        status: 'active',
-        is_active: 1,
-        is_verified: 1,
-        verified_at: new Date().toISOString()
-      })
+      const { error } = await supabase
+        .from('professionals')
+        .update({
+          status: 'active',
+          is_verified: true,
+          verified_at: new Date().toISOString()
+        })
+        .eq('id', proId)
+
+      if (error) throw error
       toast.success('Professionnel approuvé')
       fetchData()
     } catch (error) {
@@ -69,9 +81,14 @@ export function AdminDashboard() {
 
   const handleReject = async (proId: string) => {
     try {
-      await blink.db.professionals.update(proId, {
-        status: 'rejected'
-      })
+      const { error } = await supabase
+        .from('professionals')
+        .update({
+          status: 'rejected'
+        })
+        .eq('id', proId)
+
+      if (error) throw error
       toast.success('Professionnel rejeté')
       fetchData()
     } catch (error) {

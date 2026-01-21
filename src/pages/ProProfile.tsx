@@ -8,37 +8,98 @@ import { Star, MapPin, Phone, Info, Clock, CheckCircle2, ChevronRight, Calendar 
 import { Skeleton } from '@/components/ui/skeleton'
 import { format, addDays, startOfToday, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/use-auth'
+import { motion } from 'framer-motion'
+import { toast } from 'react-hot-toast'
 
 interface Service {
   id: string
   name: string
   duration: number
-  price: number
+  price_min: number
   description: string
 }
-
-const MOCK_SERVICES: Service[] = [
-  { id: 's1', name: 'Vidange & Révision intermédiaire', duration: 45, price: 89, description: 'Changement d\'huile, filtre à huile et 15 points de contrôle.' },
-  { id: 's2', name: 'Révision complète', duration: 120, price: 189, description: 'Vidange complète, tous les filtres, bougies et 50 points de contrôle.' },
-  { id: 's3', name: 'Forfait Freinage (Plaquettes AV)', duration: 60, price: 119, description: 'Remplacement des plaquettes de frein avant.' },
-  { id: 's4', name: 'Diagnostic Electronique', duration: 30, price: 49, description: 'Lecture des codes défauts et diagnostic complet.' },
-  { id: 's5', name: 'Recharge Climatisation', duration: 45, price: 79, description: 'Contrôle d\'étanchéité et recharge en gaz.' },
-]
 
 const TIME_SLOTS = ['08:00', '09:00', '10:00', '11:00', '14:00', '15:00', '16:00', '17:00']
 
 export function ProProfile() {
   const { id } = useParams()
+  const { profile: currentUserProfile, user } = useAuth()
   const navigate = useNavigate()
+  const [pro, setPro] = useState<any>(null)
+  const [services, setServices] = useState<Service[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date>(startOfToday())
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 600)
-    return () => clearTimeout(timer)
+    fetchPro()
   }, [id])
+
+  const fetchPro = async () => {
+    setIsLoading(true)
+    try {
+      const { data: proData, error: proError } = await supabase
+        .from('professionals')
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      if (proError) throw proError
+      setPro(proData)
+
+      const { data: servicesData, error: servicesError } = await supabase
+        .from('services')
+        .select('*')
+        .eq('professional_id', id)
+        .eq('is_active', true)
+
+      if (servicesError) throw servicesError
+      setServices(servicesData as any[])
+    } catch (error) {
+      console.error('Error fetching pro:', error)
+      toast.error('Échec du chargement du profil')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleBooking = async () => {
+    if (!user) {
+      toast.error('Veuillez vous connecter pour réserver')
+      navigate('/auth?mode=login')
+      return
+    }
+
+    if (selectedService && selectedDate && selectedSlot) {
+      try {
+        const [hours, minutes] = selectedSlot.split(':').map(Number)
+        const startTime = new Date(selectedDate)
+        startTime.setHours(hours, minutes, 0, 0)
+        
+        const endTime = new Date(startTime)
+        endTime.setMinutes(endTime.getMinutes() + (selectedService.duration || 60))
+
+        const { error } = await supabase.from('appointments').insert({
+          user_id: user.id,
+          professional_id: id,
+          service_id: selectedService.id,
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+          status: 'pending'
+        })
+
+        if (error) throw error
+
+        toast.success('Demande de réservation envoyée !')
+        navigate('/dashboard/bookings')
+      } catch (error: any) {
+        toast.error(error.message || 'Erreur lors de la réservation')
+      }
+    }
+  }
 
   if (isLoading) {
     return (
@@ -61,13 +122,6 @@ export function ProProfile() {
 
   const next7Days = Array.from({ length: 7 }).map((_, i) => addDays(startOfToday(), i))
 
-  const handleBooking = () => {
-    if (selectedService && selectedDate && selectedSlot) {
-      // Navigate to booking confirmation or dashboard
-      navigate('/dashboard/bookings')
-    }
-  }
-
   return (
     <div className="container mx-auto px-4 py-8 pb-20">
       {/* Header */}
@@ -75,8 +129,8 @@ export function ProProfile() {
         <div className="w-full lg:w-1/3">
           <div className="aspect-[4/3] rounded-[2rem] overflow-hidden border shadow-lg">
             <img 
-              src="https://images.unsplash.com/photo-1530046339160-ce3e5b097ea2?auto=format&fit=crop&q=80&w=600" 
-              alt="Garage" 
+              src={pro?.logo_url || "https://images.unsplash.com/photo-1530046339160-ce3e5b097ea2?auto=format&fit=crop&q=80&w=600"} 
+              alt={pro?.name} 
               className="w-full h-full object-cover"
             />
           </div>
@@ -85,17 +139,17 @@ export function ProProfile() {
         <div className="flex-1 flex flex-col justify-center gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <h1 className="text-4xl font-bold tracking-tight">Garage Central Paris</h1>
-              <Badge className="bg-primary/10 text-primary border-none">Vérifié</Badge>
+              <h1 className="text-4xl font-bold tracking-tight">{pro?.name}</h1>
+              {pro?.is_verified && <Badge className="bg-primary/10 text-primary border-none">Vérifié</Badge>}
             </div>
             <div className="flex items-center gap-4 text-muted-foreground">
               <div className="flex items-center gap-1 text-yellow-600 font-bold">
                 <Star size={18} className="fill-yellow-600" />
-                4.8 (124 avis)
+                {pro?.rating || 0} ({pro?.review_count || 0} avis)
               </div>
               <div className="flex items-center gap-1">
                 <MapPin size={18} />
-                75001 Paris
+                {pro?.city}
               </div>
             </div>
           </div>
@@ -103,7 +157,7 @@ export function ProProfile() {
           <div className="flex flex-wrap gap-3">
             <Button variant="outline" className="rounded-xl gap-2">
               <Phone size={18} />
-              01 23 45 67 89
+              {pro?.phone}
             </Button>
             <Button variant="outline" className="rounded-xl gap-2">
               <Info size={18} />
@@ -112,7 +166,7 @@ export function ProProfile() {
           </div>
 
           <p className="text-muted-foreground text-lg leading-relaxed max-w-2xl">
-            Professionnel spécialisé dans l'entretien et la réparation multi-marques. Nous utilisons les dernières technologies de diagnostic pour garantir la longévité de votre véhicule.
+            {pro?.description || "Professionnel spécialisé dans l'entretien et la réparation multi-marques."}
           </p>
         </div>
       </div>
@@ -144,7 +198,7 @@ export function ProProfile() {
 
             <TabsContent value="services" className="space-y-4 m-0">
               <div className="grid gap-4">
-                {MOCK_SERVICES.map((service) => (
+                {services.map((service) => (
                   <Card 
                     key={service.id} 
                     className={`cursor-pointer transition-all rounded-2xl hover:border-primary/50 ${selectedService?.id === service.id ? 'border-primary ring-1 ring-primary/20' : ''}`}
@@ -159,7 +213,7 @@ export function ProProfile() {
                             <Clock size={14} className="text-muted-foreground" />
                             {service.duration} min
                           </span>
-                          <span className="text-sm font-bold text-primary">{service.price}€</span>
+                          <span className="text-sm font-bold text-primary">{service.price_min}€</span>
                         </div>
                       </div>
                       <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${selectedService?.id === service.id ? 'border-primary bg-primary text-white' : 'border-muted'}`}>
@@ -244,7 +298,7 @@ export function ProProfile() {
                           <p className="text-sm text-muted-foreground">Récapitulatif</p>
                           <p className="font-bold">{selectedService.name}</p>
                         </div>
-                        <p className="font-bold text-lg text-primary">{selectedService.price}€</p>
+                        <p className="font-bold text-lg text-primary">{selectedService.price_min}€</p>
                       </div>
                       <div className="flex items-center gap-2 text-sm font-medium">
                         <CalendarIcon size={14} />

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Plus, Car, Trash2, Edit2, ChevronRight } from 'lucide-react'
-import { blink } from '@/lib/blink'
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'react-hot-toast'
 import {
@@ -40,10 +40,13 @@ export function DashboardVehicles() {
   const fetchVehicles = async () => {
     if (!profile) return
     try {
-      const data = await blink.db.vehicles.list({
-        where: { clientId: profile.id }
-      }) as Vehicle[]
-      setVehicles(data)
+      const { data, error } = await supabase
+        .from('vehicles')
+        .select('*')
+        .eq('user_id', profile.id)
+
+      if (error) throw error
+      setVehicles(data as Vehicle[])
     } catch (error) {
       console.error(error)
     } finally {
@@ -60,10 +63,12 @@ export function DashboardVehicles() {
     if (!profile) return
     
     try {
-      await blink.db.vehicles.create({
+      const { error } = await supabase.from('vehicles').insert({
         ...newVehicle,
-        clientId: profile.id
+        user_id: profile.id
       })
+
+      if (error) throw error
       toast.success('Véhicule ajouté !')
       setNewVehicle({ make: '', model: '', plateNumber: '', year: new Date().getFullYear() })
       setIsAdding(false)
@@ -76,7 +81,12 @@ export function DashboardVehicles() {
   const handleDelete = async (id: string) => {
     if (!confirm('Supprimer ce véhicule ?')) return
     try {
-      await blink.db.vehicles.delete(id)
+      const { error } = await supabase
+        .from('vehicles')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
       toast.success('Véhicule supprimé')
       fetchVehicles()
     } catch (error) {

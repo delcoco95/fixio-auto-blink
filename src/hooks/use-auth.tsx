@@ -1,19 +1,22 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { blink } from '@/lib/blink'
-import type { BlinkUser } from '@blinkdotnew/sdk'
+import { supabase } from '@/lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
+import type { User } from '@supabase/supabase-js'
 
 interface UserProfile {
   id: string
   email: string
   role: 'client' | 'pro' | 'admin'
-  displayName: string | null
+  full_name: string | null
   phone: string | null
+  business_name?: string | null
+  address?: string | null
+  is_validated?: boolean
 }
 
 interface AuthContextType {
-  user: BlinkUser | null
+  user: User | null
   profile: UserProfile | null
   isLoading: boolean
   isAuthenticated: boolean
@@ -25,70 +28,62 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<BlinkUser | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
-    const unsubscribe = blink.auth.onAuthStateChanged(async (state) => {
-      setUser(state.user)
-      
-      if (state.user) {
-        try {
-          const users = await blink.db.users.list({
-            where: { id: state.user.id }
-          }) as any[]
-
-          if (users.length > 0) {
-            setProfile(users[0])
-          } else {
-            // Get role and metadata from state.user
-            const metadata = state.user.metadata || {}
-            const role = state.user.email === 'nedjpro06@gmail.com' ? 'admin' : (metadata.role || 'client')
-            
-            const newProfile = await blink.db.users.create({
-              id: state.user.id,
-              userId: state.user.id,
-              email: state.user.email,
-              role,
-              displayName: state.user.displayName || null,
-              phone: metadata.phone || null,
-              metadata: JSON.stringify(metadata)
-            }) as UserProfile
-            setProfile(newProfile)
-
-            // If pro, create professional entry
-            if (role === 'pro') {
-              await blink.db.professionals.create({
-                userId: state.user.id,
-                name: metadata.garageName || state.user.displayName || 'Nouveau Garage',
-                address: metadata.address || '',
-                siret: metadata.siret || '',
-                phone: metadata.phone || '',
-                status: 'pending', // Admins need to validate
-                is_active: 0,
-                is_verified: 0,
-                rating: 0,
-                review_count: 0
-              })
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching/creating profile:', error)
-        }
+    // Check active sessions and sets the user
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      if (session?.user) {
+        fetchProfile(session.user.id)
       } else {
-        setProfile(null)
+        setIsLoading(false)
       }
-      setIsLoading(state.isLoading)
     })
 
-    return unsubscribe
+    // Listen for changes on auth state (sign in, sign out, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const currentUser = session?.user ?? null
+      setUser(currentUser)
+      
+      if (currentUser) {
+        await fetchProfile(currentUser.id)
+      } else {
+        setProfile(null)
+        setIsLoading(false)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
+
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (error) throw error
+      setProfile(data as UserProfile)
+    } catch (error) {
+      console.error('Error fetching profile:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const signIn = async (email: string, password: string) => {
     try {
-      await blink.auth.signInWithEmail(email, password)
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      if (error) throw error
     } catch (error: any) {
       toast.error(error.message || 'Échec de la connexion')
       throw error
@@ -97,7 +92,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (params: any) => {
     try {
-      await blink.auth.signUp(params)
+      const { error } = await supabase.auth.signUp({
+        email: params.email,
+        password: params.password,
+        options: {
+          data: {
+            full_name: params.displayName,
+            role: params.metadata.role,
+            ...params.metadata,
+          },
+          emailRedirectTo: `${window.location.origin}/verify-email`,
+        },
+      })
+      if (error) throw error
+      toast.success('Inscription réussie ! Veuillez vérifier votre email.')
     } catch (error: any) {
       toast.error(error.message || 'Échec de l\'inscription')
       throw error
@@ -105,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = async () => {
-    await blink.auth.signOut()
+    await supabase.auth.signOut()
     navigate('/')
   }
 

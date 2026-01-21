@@ -3,7 +3,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar, Clock, MapPin, Wrench, Star } from 'lucide-react'
-import { blink } from '@/lib/blink'
 import { useAuth } from '@/hooks/use-auth'
 
 export function DashboardOverview() {
@@ -27,7 +26,7 @@ export function DashboardOverview() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold">Bonjour, {profile?.displayName || 'Client'}</h2>
+        <h2 className="text-2xl font-bold">Bonjour, {profile?.full_name || 'Client'}</h2>
         <p className="text-muted-foreground">Voici un aperçu de votre activité FIXIO.</p>
       </div>
 

@@ -10,12 +10,12 @@ interface ProCardProps {
   address: string
   rating: number
   reviewCount: number
-  nextAvailability: string
+  nextAvailability?: string
   logoUrl?: string
   distance?: string
 }
 
-export function ProCard({ id, name, address, rating, reviewCount, nextAvailability, logoUrl, distance }: ProCardProps) {
+export function ProCard({ id, name, address, rating, reviewCount, nextAvailability = 'Prochainement', logoUrl, distance }: ProCardProps) {
   return (
     <Card className="overflow-hidden group hover:border-primary/50 transition-all hover:shadow-xl hover:shadow-primary/5 rounded-3xl">
       <CardContent className="p-0">

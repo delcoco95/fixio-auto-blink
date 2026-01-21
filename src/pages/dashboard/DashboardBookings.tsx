@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Clock, MapPin, AlertCircle, Trash2, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
-import { blink } from '@/lib/blink'
+import { supabase } from '@/lib/supabase'
 import { toast } from 'react-hot-toast'
 import { cn } from '@/lib/utils'
 
@@ -22,10 +22,17 @@ export function DashboardBookings() {
   const fetchBookings = async () => {
     setIsLoading(true)
     try {
-      const data = await blink.db.appointments.list({
-        where: { clientId: profile?.id }
-      }) as any[]
-      setBookings(data)
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(`
+          *,
+          service:services(*),
+          professional:professionals(*)
+        `)
+        .eq('user_id', profile?.id)
+
+      if (error) throw error
+      setBookings(data || [])
     } catch (error) {
       console.error('Error fetching bookings:', error)
       toast.error('Erreur lors du chargement de vos réservations')
@@ -47,7 +54,12 @@ export function DashboardBookings() {
     if (!confirm('Êtes-vous sûr de vouloir annuler ce rendez-vous ?')) return
 
     try {
-      await blink.db.appointments.update(bookingId, { status: 'cancelled' })
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: 'cancelled' })
+        .eq('id', bookingId)
+
+      if (error) throw error
       toast.success('Rendez-vous annulé')
       fetchBookings()
     } catch (error) {
@@ -146,11 +158,11 @@ function BookingCard({ booking, onCancel, isUpcoming }: { booking: any, onCancel
             </Badge>
           </div>
           <h4 className="font-bold text-lg leading-tight group-hover:text-primary transition-colors">
-            {booking.serviceName || 'Entretien périodique'}
+            {booking.service?.name || 'Entretien périodique'}
           </h4>
           <p className="text-sm text-muted-foreground flex items-center gap-1">
             <MapPin size={14} />
-            {booking.proName || 'Garage partenaire'}
+            {booking.professional?.name || 'Garage partenaire'}
           </p>
           <p className="text-xs text-muted-foreground mt-2">
             Véhicule : {booking.vehicleMake || 'Véhicule'} {booking.vehicleModel || ''}
