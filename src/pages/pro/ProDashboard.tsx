@@ -1,30 +1,110 @@
 import { useState, useEffect } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Calendar, Users, Wrench, BarChart3, Clock, CheckCircle2 } from 'lucide-react'
+import { Calendar, Users, Wrench, BarChart3, Clock, CheckCircle2, Settings, Image, Plus, ChevronRight, AlertCircle, CreditCard } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
+import { Badge } from '@/components/ui/badge'
+import { blink } from '@/lib/blink'
+import { toast } from 'react-hot-toast'
+import { cn } from '@/lib/utils'
 
 export function ProDashboard() {
   const { profile } = useAuth()
+  const [appointments, setAppointments] = useState<any[]>([])
+  const [services, setServices] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   
+  // Trial logic
+  const metadata = profile?.metadata ? JSON.parse(profile.metadata) : {}
+  const trialStartDate = metadata.trialStartDate ? new Date(metadata.trialStartDate) : new Date()
+  const daysPassed = Math.floor((new Date().getTime() - trialStartDate.getTime()) / (1000 * 60 * 60 * 24))
+  const daysRemaining = Math.max(0, 90 - daysPassed)
+  const isTrialExpired = daysRemaining === 0
+
+  useEffect(() => {
+    if (profile?.id) {
+      fetchProData()
+    }
+  }, [profile?.id])
+
+  const fetchProData = async () => {
+    setIsLoading(true)
+    try {
+      const proRecord = await blink.db.professionals.list({
+        where: { userId: profile?.id }
+      }) as any[]
+
+      if (proRecord.length > 0) {
+        const proId = proRecord[0].id
+        const [appts, svcs] = await Promise.all([
+          blink.db.appointments.list({ where: { professionalId: proId } }),
+          blink.db.services.list({ where: { professionalId: proId } })
+        ])
+        setAppointments(appts)
+        setServices(svcs)
+      }
+    } catch (error) {
+      console.error('Error fetching pro data:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
-    <div className="container mx-auto px-4 py-12 space-y-12">
+    <div className="container mx-auto px-4 py-8 space-y-8">
+      {/* Trial Banner */}
+      <Card className={cn(
+        "border-none shadow-md overflow-hidden",
+        isTrialExpired ? "bg-destructive/10" : "bg-primary/5 border border-primary/10"
+      )}>
+        <CardContent className="p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center",
+              isTrialExpired ? "bg-destructive/20 text-destructive" : "bg-primary/20 text-primary"
+            )}>
+              {isTrialExpired ? <AlertCircle size={20} /> : <Clock size={20} />}
+            </div>
+            <div>
+              <p className="font-bold">
+                {isTrialExpired ? "Votre période d'essai a expiré" : "Période d'essai gratuit"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {isTrialExpired 
+                  ? "Veuillez souscrire à un abonnement pour continuer à recevoir des réservations." 
+                  : `${daysRemaining} jours restants sur vos 90 jours d'essai offerts.`}
+              </p>
+            </div>
+          </div>
+          {isTrialExpired && (
+            <Button className="rounded-xl bg-primary text-white hover:bg-primary/90">
+              <CreditCard className="mr-2 h-4 w-4" />
+              S'abonner via Stripe
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <Badge className="bg-primary/10 text-primary border-none mb-4">Espace Pro</Badge>
-          <h1 className="text-4xl font-bold tracking-tight">Bonjour, {profile?.displayName || 'Garage'}</h1>
-          <p className="text-muted-foreground text-lg">Votre activité pour aujourd'hui, {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Tableau de bord</h1>
+          <p className="text-muted-foreground">
+            Bienvenue, {profile?.displayName || 'Partenaire'}. Gerez votre garage et vos rendez-vous.
+          </p>
         </div>
         <div className="flex gap-3">
           <Button variant="outline" className="rounded-xl">Bloquer un créneau</Button>
-          <Button className="rounded-xl">Ajouter un service</Button>
+          <Button className="rounded-xl">
+            <Plus className="mr-2 h-4 w-4" />
+            Ajouter un service
+          </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {[
-          { label: 'RDV aujourd\'hui', value: '8', icon: Calendar, color: 'text-primary' },
+          { label: 'RDV aujourd\'hui', value: appointments.filter(appt => new Date(appt.startTime).toDateString() === new Date().toDateString()).length, icon: Calendar, color: 'text-primary' },
           { label: 'CA estimé (mois)', value: '12,450€', icon: BarChart3, color: 'text-green-600' },
           { label: 'Nouveaux clients', value: '24', icon: Users, color: 'text-blue-600' },
           { label: 'Taux de remplissage', value: '85%', icon: Clock, color: 'text-purple-600' },
@@ -60,16 +140,23 @@ export function ProDashboard() {
           </div>
           
           <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
+            {appointments.length === 0 && !isLoading && (
+              <Card className="rounded-3xl">
+                <CardContent className="p-6 text-center text-muted-foreground">
+                  Aucun rendez-vous prévu pour le moment.
+                </CardContent>
+              </Card>
+            )}
+            {appointments.map((appt, i) => (
               <Card key={i} className="rounded-3xl hover:border-primary/30 transition-all cursor-pointer">
                 <CardContent className="p-6 flex items-center gap-6">
                   <div className="w-16 h-16 bg-muted rounded-2xl flex flex-col items-center justify-center font-bold">
-                    <span className="text-xs opacity-60">10:00</span>
-                    <span className="text-primary">14 JAN</span>
+                    <span className="text-xs opacity-60">{new Date(appt.startTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="text-primary">{new Date(appt.startTime).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }).toUpperCase()}</span>
                   </div>
                   <div className="flex-1 space-y-1">
-                    <h4 className="font-bold text-lg">Vidange + Filtres - Peugeot 208</h4>
-                    <p className="text-sm text-muted-foreground">Client: Jean Dupont • 06 12 34 56 78</p>
+                    <h4 className="font-bold text-lg">{appt.service?.name || 'Service non spécifié'}</h4>
+                    <p className="text-sm text-muted-foreground">Client: {appt.client?.name || 'Nom inconnu'} • {appt.client?.phone || 'Numéro inconnu'}</p>
                   </div>
                   <div className="flex items-center gap-4">
                     <Badge className="bg-blue-100 text-blue-700 border-none">À venir</Badge>

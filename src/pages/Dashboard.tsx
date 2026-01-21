@@ -1,6 +1,8 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { DashboardOverview } from './dashboard/DashboardOverview'
 import { DashboardVehicles } from './dashboard/DashboardVehicles'
+import { DashboardBookings } from './dashboard/DashboardBookings'
+import { DashboardSettings } from './dashboard/DashboardSettings'
 import { ProDashboard } from './pro/ProDashboard'
 import { AdminDashboard } from './admin/AdminDashboard'
 import { LayoutDashboard, Car, Calendar, Star, Settings } from 'lucide-react'
@@ -59,9 +61,9 @@ export function Dashboard() {
           <Routes>
             <Route path="/" element={<DashboardOverview />} />
             <Route path="/vehicles" element={<DashboardVehicles />} />
-            <Route path="/bookings" element={<div className="p-20 text-center bg-muted/20 rounded-[3rem]">Section Réservations en cours de développement...</div>} />
+            <Route path="/bookings" element={<DashboardBookings />} />
             <Route path="/reviews" element={<div className="p-20 text-center bg-muted/20 rounded-[3rem]">Section Avis en cours de développement...</div>} />
-            <Route path="/settings" element={<div className="p-20 text-center bg-muted/20 rounded-[3rem]">Section Paramètres en cours de développement...</div>} />
+            <Route path="/settings" element={<DashboardSettings />} />
           </Routes>
         </main>
       </div>

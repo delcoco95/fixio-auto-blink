@@ -41,27 +41,27 @@ export function Navbar() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || ''} />
-                    <AvatarFallback>{user?.displayName?.charAt(0) || 'U'}</AvatarFallback>
+                    <AvatarImage src={profile?.avatar_url || ''} alt={profile?.displayName || ''} />
+                    <AvatarFallback>{profile?.displayName?.charAt(0) || 'U'}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{user?.displayName}</p>
-                    <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                    <p className="text-sm font-medium leading-none">{profile?.displayName}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{profile?.email}</p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link to="/dashboard">
+                  <Link to={profile?.role === 'admin' ? '/admin' : profile?.role === 'pro' ? '/pro/dashboard' : '/dashboard'}>
                     <LayoutDashboard className="mr-2 h-4 w-4" />
                     <span>Tableau de bord</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link to="/profile">
+                  <Link to="/dashboard/settings">
                     <User className="mr-2 h-4 w-4" />
                     <span>Mon profil</span>
                   </Link>
@@ -75,8 +75,12 @@ export function Navbar() {
             </DropdownMenu>
           ) : (
             <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={login}>Connexion</Button>
-              <Button onClick={login}>Réserver</Button>
+              <Button variant="ghost" asChild>
+                <Link to="/auth?mode=login">Connexion</Link>
+              </Button>
+              <Button asChild>
+                <Link to="/auth?mode=signup">Réserver</Link>
+              </Button>
             </div>
           )}
         </div>
